@@ -1,3 +1,4 @@
 CNN
 ===
-Very bad research-quality code.  
+Convolutional neural network written in Theano for EEG classification. 
+
