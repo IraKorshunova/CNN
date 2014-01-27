@@ -7,11 +7,8 @@ class DataIterator(object):
         self.dataset = dataset
         x, y = dataset
 
-        idx_0 = np.where(y == 0)
-        self.x0 = x[idx_0]
-
-        idx_1 = np.where(y == 1)
-        self.x1 = x[idx_1]
+        self.x0 = x[np.where(y == 0)]
+        self.x1 = x[np.where(y == 1)]
 
         self.index = 0
         self.size = self.x1.shape[0]
