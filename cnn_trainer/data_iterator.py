@@ -8,6 +8,9 @@ class DataIterator(object):
         self.index = 0
         self.max_index = self.x.shape[0] - 1
 
+    def __iter__(self):
+        return self
+
     def next(self):
         if self.index > self.max_index:
             self.__restart()
@@ -21,8 +24,6 @@ class DataIterator(object):
     def __restart(self):
         self.index = 0
 
-    def __iter__(self):
-        return self
 
     def get_number_of_batches(self):
         return  self.max_index + 1
