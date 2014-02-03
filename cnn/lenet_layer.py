@@ -30,6 +30,11 @@ class LeNetConvPoolLayer(object):
         conv_out = conv.conv2d(self.input_shuffled, self.W_shuffled, filter_shape=self.filter_shape,
                                image_shape=self.input_shape, subsample=(20, 1))
 
+        #print 'input_shape', self.input_shape
+        #print 'filter_shape',self.filter_shape
+        self.conv_out_shape = conv_out.shape
+        self.input_shuffled_shape = self.input_shuffled.shape
+
         pooled_out = downsample.max_pool_2d(conv_out, poolsize, ignore_border=True)
 
         self.output = T.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))

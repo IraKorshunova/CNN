@@ -4,8 +4,7 @@ import theano.tensor as T
 
 
 class HiddenLayer(object):
-    def __init__(self, rng, input, n_in, n_out, W=None, b=None,
-                 activation=T.tanh):
+    def __init__(self, rng, input, n_in, n_out, dropout_prob, W=None, b=None):
         self.input = input
 
         if W is None:
@@ -13,8 +12,6 @@ class HiddenLayer(object):
                 low=-numpy.sqrt(6. / (n_in + n_out)),
                 high=numpy.sqrt(6. / (n_in + n_out)),
                 size=(n_in, n_out)), dtype='float32')
-            if activation == theano.tensor.nnet.sigmoid:
-                W_values *= 4
 
             W = theano.shared(value=W_values, name='W', borrow=True)
 
@@ -26,7 +23,17 @@ class HiddenLayer(object):
         self.b = b
 
         lin_output = T.dot(input, self.W) + self.b
-        self.output = (lin_output if activation is None
-                       else activation(lin_output))
+
+        if dropout_prob != 0:
+            lin_output = self._dropout(rng, lin_output, dropout_prob)
+
+        self.output = T.tanh(lin_output)
 
         self.params = [self.W, self.b]
+
+    def _dropout(self, rng, layer, p):
+        print 'dropping with probability', p
+        srng = T.shared_randomstreams.RandomStreams(rng.randint(999999))
+        mask = srng.binomial(n=1, p=1 - p, size=layer.shape)
+        output = layer * T.cast(mask, 'float32')
+        return output
