@@ -3,7 +3,7 @@ import theano
 
 
 class DataLoader(object):
-    def __init__(self, path, test_file_num, other_file_nums, shared=True):
+    def __init__(self, path, test_file_num, other_file_nums, shared=False):
 
         self.n_time_points = 1000
         self.n_channels = 18

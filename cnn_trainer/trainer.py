@@ -27,12 +27,9 @@ class Trainer(object):
     def evaluate_lenet(self, learning_rate, n_epochs,
                        nkerns, recept_width, pool_width,
                        dropout_prob,
+                       max_fails, improvement_threshold,
+                       valids_per_epoch,
                        n_timesteps=1000, dim=18):
-
-        print '======== params'
-        print 'nkerns: ', nkerns
-        print 'receptive width: ', recept_width
-        print 'pool_width: ', pool_width
 
         rng = np.random.RandomState(23455)
 
@@ -102,12 +99,13 @@ class Trainer(object):
                                      on_unused_input='ignore')
 
         #------------------------------  TRAINING
-        max_fails = 3
-        fails = 0
-        improvement_threshold = 0.05
-        validation_frequency = self.n_batches
+        max_fails = max_fails
+        improvement_threshold = improvement_threshold
+        validation_frequency = self.n_batches / valids_per_epoch
+
         best_valid_cost = np.inf
         best_iter = 0
+        fails = 0
         iter = 0
         epoch = 0
         done_looping = False
@@ -124,7 +122,7 @@ class Trainer(object):
                 if iter % validation_frequency == 0:
                     batch_size.set_value(self.valid_size)
                     [valid_cost, tp, tn, fp, fn] = validate_model(self.valid_set_x, self.valid_set_y)
-                    print 'validation at iter #', iter
+                    print 'validation @ iter #', iter
                     print 'tp:', tp, 'tn:', tn, 'fp:', fp, 'fn', fn
                     print 'cost:', valid_cost
                     print '*********************'
@@ -139,7 +137,6 @@ class Trainer(object):
                     batch_size.set_value(1)
 
                     fails = 0 if best_valid_cost-valid_cost > improvement_threshold else fails + 1
-                    print '#fails:', fails
                     if valid_cost < best_valid_cost:
                         best_valid_cost = valid_cost
                         best_iter = iter
@@ -150,6 +147,6 @@ class Trainer(object):
 
         print('Optimization complete.')
         print 'Best validation cost', best_valid_cost
-        print 'Best iteration', best_iter + 1
+        print 'Best iteration', best_iter
 
         return np.array(best_valid_cost).item()
