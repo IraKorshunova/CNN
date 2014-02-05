@@ -32,7 +32,6 @@ class HiddenLayer(object):
         self.params = [self.W, self.b]
 
     def _dropout(self, rng, layer, p):
-        print 'dropping with probability', p
         srng = T.shared_randomstreams.RandomStreams(rng.randint(999999))
         mask = srng.binomial(n=1, p=1 - p, size=layer.shape)
         output = layer * T.cast(mask, 'float32')
