@@ -5,7 +5,7 @@ from theano.tensor.signal import downsample
 from theano import tensor as T
 
 
-class LeNetConvPoolLayer(object):
+class ConvPoolLayer(object):
     def __init__(self, rng, input, filter_shape, image_shape, poolsize):
         assert image_shape[1] == filter_shape[1]
 

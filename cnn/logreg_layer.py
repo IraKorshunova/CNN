@@ -16,9 +16,9 @@ class LogisticRegressionLayer(object):
         #                           T.nnet.softmax(T.dot(input, inv_dropout_prob*self.W) + self.b))
 
         if dropout_prob != 0:
-            inv_dropout_prob = np.float32(1-dropout_prob)
+            inv_dropout_prob = np.float32(1 - dropout_prob)
             self.p_y_given_x = ifelse(T.eq(training_mode, 1), T.nnet.softmax(T.dot(input, self.W) + self.b),
-                                      T.nnet.softmax(T.dot(input, inv_dropout_prob*self.W) + self.b))
+                                      T.nnet.softmax(T.dot(input, inv_dropout_prob * self.W) + self.b))
         else:
             self.p_y_given_x = T.nnet.softmax(T.dot(input, self.W) + self.b)
 
@@ -41,3 +41,15 @@ class LogisticRegressionLayer(object):
         fp = T.and_(T.eq(y, 0), T.eq(self.y_pred, 1)).sum()
         fn = T.and_(T.eq(y, 1), T.eq(self.y_pred, 0)).sum()
         return [fp, fn]
+
+    def ber(self, y):
+        tp = T.and_(T.eq(y, 1), T.eq(self.y_pred, 1)).sum()
+        tn = T.and_(T.eq(y, 0), T.eq(self.y_pred, 0)).sum()
+        fp = T.and_(T.eq(y, 0), T.eq(self.y_pred, 1)).sum()
+        fn = T.and_(T.eq(y, 1), T.eq(self.y_pred, 0)).sum()
+        #ber = 0.5 * (T.true_div(fp, tp + fp) + T.true_div(fn, tn + fn))
+        ber = 0.5 * (T.true_div(fp, tp + fp) + T.true_div(fn, tn + fn))
+        ber = ifelse(T.isnan(ber), np.inf, ber)
+        return ber
+
+
