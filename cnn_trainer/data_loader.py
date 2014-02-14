@@ -3,42 +3,47 @@ import theano
 
 
 class DataLoader(object):
-    def __init__(self, path, test_file_num, other_file_nums, shared=False):
+    def __init__(self, path, test_file_num, other_file_nums):
 
         self.n_time_points = 1000
         self.n_channels = 18
         self.path = path
 
-        self.test_mode = False if test_file_num is None else True
-
-        if self.test_mode:
-            self.test_set = self._load(test_file_num, shuffle=False)
+        self.test_set = self._load(test_file_num, shuffle=False)
 
         sets = self._load(other_file_nums, shuffle=True)
-        train_size = sets[0].shape[0] * 0.8
 
+        # sets_x_pos = sets[0][np.where(sets[1] == 1)]
+        # sets_x_neg = sets[0][np.where(sets[1] == 0)]
+        #
+        # train_size_pos = sets_x_pos.shape[0]*0.8
+        # train_size_neg = sets_x_neg.shape[0]*0.8
+        #
+        # train_set_x = np.vstack((sets_x_pos[:train_size_pos], sets_x_neg[:train_size_neg]))
+        # valid_set_x = np.vstack((sets_x_pos[train_size_pos:], sets_x_neg[train_size_neg:]))
+        #
+        #
+        # print sets_x_pos.shape
+
+        train_size = sets[0].shape[0] * 0.8
         self.train_set = sets[0][:train_size], sets[1][:train_size]
         self.valid_set = sets[0][train_size:], sets[1][train_size:]
 
         self._print_stats()
 
-        if shared:
-            self.test_set = self._shared_dataset(self.test_set)
-            self.valid_set = self._shared_dataset(self.valid_set)
-            if self.test_mode:
-                self.train_set = self._shared_dataset(self.train_set)
 
     def _print_stats(self):
         print '======== dataset'
         print 'train:', self.train_set[0].shape
         print 'train number of seizures:', sum(self.train_set[1])
 
-        print 'valid:', self.valid_set[0].shape
-        print 'valid number of seizures:', sum(self.valid_set[1])
+        print 'test:', self.test_set[0].shape
+        print 'test number of seizures:', sum(self.test_set[1])
 
-        if self.test_mode:
-            print 'test:', self.test_set[0].shape
-            print 'test number of seizures:', sum(self.test_set[1])
+        if self.valid_set is not None:
+            print 'valid:', self.valid_set[0].shape
+            print 'valid number of seizures:', sum(self.valid_set[1])
+
 
     def _load(self, file_numbers, shuffle):
         if file_numbers.shape == ():
@@ -69,14 +74,6 @@ class DataLoader(object):
 
         return x, y
 
-    def _shared_dataset(self, data, borrow=True):
-        x, y = data
-        shared_x = theano.shared(np.asarray(x, dtype='float32'), borrow=borrow)
-        shared_y = theano.shared(np.asarray(y, dtype='int8'), borrow=borrow)
-        return shared_x, shared_y
-
     def get_datasets(self):
-        if self.test_mode:
-            return self.train_set, self.valid_set, self.test_set
-        else:
-            return self.train_set, self.valid_set
+        datasets = {'train': self.train_set, 'valid': self.valid_set, 'test': self.test_set}
+        return datasets
