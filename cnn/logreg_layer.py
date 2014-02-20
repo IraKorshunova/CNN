@@ -47,9 +47,7 @@ class LogisticRegressionLayer(object):
         tn = T.and_(T.eq(y, 0), T.eq(self.y_pred, 0)).sum()
         fp = T.and_(T.eq(y, 0), T.eq(self.y_pred, 1)).sum()
         fn = T.and_(T.eq(y, 1), T.eq(self.y_pred, 0)).sum()
-        #ber = 0.5 * (T.true_div(fp, tp + fp) + T.true_div(fn, tn + fn))
         ber = 0.5 * (T.true_div(fp, tp + fp) + T.true_div(fn, tn + fn))
-        ber = ifelse(T.isnan(ber), np.inf, ber)
         return ber
 
 
