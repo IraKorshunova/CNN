@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class DataIterator(object):
+class TrainSetIterator(object):
 
     def __init__(self, dataset):
         self.x, self.y = dataset
