@@ -72,9 +72,9 @@ class ConvNet(object):
         for param_i, grad_i in zip(self.params, grads):
             updates.append((param_i, param_i - learning_rate * grad_i))
 
-        # mean_square = [theano.shared(np.zeros_like(param_i.get_value())) for param_i in self.params]
-        # for ms in mean_square:
-        #     print ms.get_value().shape
+        mean_square = [theano.shared(np.zeros_like(param_i.get_value())) for param_i in self.params]
+        for ms in mean_square:
+            print ms.get_value().shape
         #
         #
         # updates = []
@@ -91,17 +91,15 @@ class ConvNet(object):
         f_grad = theano.function([self.x, self.y, Param(self.training_mode, default=1)], grads,
                                       on_unused_input='ignore')
 
-        plus = orig
-        plus[0,0] = orig[0,0] + eps
-        self.params[check_idx].set_value(plus)
+        orig[0,0] += eps
+        self.params[check_idx].set_value(orig)
         cost_plus = 0
         for i in train_set_iterator:
             cost_plus = f_cost(i[0], i[1])
             break
 
-        minus = orig
-        minus[0,0] = orig[0,0] - eps
-        self.params[check_idx].set_value(minus)
+        orig[0,0] -= 2*eps
+        self.params[check_idx].set_value(orig)
         cost_minus = 0
         for i in train_set_iterator:
             cost_minus = f_cost(i[0], i[1])
@@ -110,6 +108,7 @@ class ConvNet(object):
         grad_num = (cost_plus - cost_minus)/ (2*eps)
         print grad_num
 
+        orig[0,0] += eps
         self.params[check_idx].set_value(orig)
         for i in train_set_iterator:
             print f_grad(i[0], i[1])[check_idx]
