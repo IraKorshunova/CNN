@@ -10,13 +10,8 @@ class LogisticRegressionLayer(object):
                                name='W', borrow=True)
         self.b = theano.shared(value=np.zeros((n_out,), dtype='float32'),
                                name='b', borrow=True)
-
-        # inv_dropout_prob = np.float32(1-dropout_prob)
-        # self.p_y_given_x = ifelse(T.eq(training_mode, 1), T.nnet.softmax(T.dot(input, self.W) + self.b),
-        #                           T.nnet.softmax(T.dot(input, inv_dropout_prob*self.W) + self.b))
-
-        if dropout_prob != 0:
-            inv_dropout_prob = np.float32(1 - dropout_prob)
+        if dropout_prob != 0.0:
+            inv_dropout_prob = np.float32(1.0 - dropout_prob)
             self.p_y_given_x = ifelse(T.eq(training_mode, 1), T.nnet.softmax(T.dot(input, self.W) + self.b),
                                       T.nnet.softmax(T.dot(input, inv_dropout_prob * self.W) + self.b))
         else:

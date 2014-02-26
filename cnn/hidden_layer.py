@@ -24,11 +24,12 @@ class HiddenLayer(object):
 
         lin_output = T.dot(input, self.W) + self.b
 
-        if dropout_prob != 0:
+        if dropout_prob != 0.0:
             lin_output = self._dropout(rng, lin_output, dropout_prob)
 
         self.output = T.tanh(lin_output)
 
+        #print self.W.get_value()
         self.params = [self.W, self.b]
 
     def _dropout(self, rng, layer, p):
