@@ -3,7 +3,7 @@ import re
 import numpy as np
 from theano import config
 from cnn.conv_net import ConvNet
-from datasets_iterator import DatasetsIterator, load
+from datasets_loader import DatasetsLoader, load
 
 
 config.floatX = 'float32'
@@ -45,7 +45,7 @@ print file_nums
 
 for t in file_nums:
     test_set = np.load(path + 'X_' + str(t) + ".npy"), np.load(path + 'Y_' + str(t) + ".npy")
-    datasets_iterator = DatasetsIterator(path, file_nums[file_nums != t])
+    datasets_iterator = DatasetsLoader(path, file_nums[file_nums != t])
 
     valid_errors = []
     for learning_rate_decay in lr_decays:
@@ -63,7 +63,7 @@ for t in file_nums:
     # test with optimal learning rate decay
     opt_decay = lr_decays[np.argmin(valid_errors)]
     conv_net = ConvNet(nkerns, recept_width, pool_width, dropout_prob)
-    train_set = load(path, file_nums[file_nums != t])
+    train_set = load(path, file_nums[file_nums != t], True)
     conv_net.test(train_set, test_set, init_learning_rate, opt_decay)
 
 
