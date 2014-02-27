@@ -2,12 +2,12 @@ import numpy as np
 
 
 class DatasetsLoader(object):
-    def __init__(self, path, file_numbers):
+    def __init__(self, path, file_numbers, n_folds):
         self.n_time_points = 1000
         self.n_channels = 18
         self.path = path
         self.file_numbers = file_numbers
-        self.n_valid_files = np.ceil(len(file_numbers) / 3)
+        self.n_valid_files = np.ceil(len(file_numbers) / n_folds)
         self.index = 0
         self.max_index = len(file_numbers) - 1
 
