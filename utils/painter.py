@@ -1,16 +1,10 @@
-import cPickle
 import matplotlib.pyplot as plt
 import numpy as np
 
-f = open('out_507_01.pkl', 'rb')
-cost, gnorms = cPickle.load(f)
-plt.plot(cost, 'g', linewidth=2.0)
-plt.plot(gnorms[:,0], 'b')
-plt.plot(gnorms[:,1], 'b--')
-plt.plot(gnorms[:,2], 'r')
-plt.plot(gnorms[:,3], 'r--')
-plt.plot(gnorms[:,4], 'm')
-plt.plot(gnorms[:,5], 'm--')
-plt.plot(gnorms[:,6], 'k')
-plt.plot(gnorms[:,7], 'k--')
+skip = 14
+b1 = np.genfromtxt('../plots_data/bs1', delimiter=' ', skiprows=skip)
+b5= np.genfromtxt('../plots_data/bs5', delimiter=' ', skiprows=skip)
+plt.plot(b1[:,1], b1[:,6], 'm', label='1')
+plt.plot(b5[:,1], b5[:,6], 'g', label='5')
+plt.legend(loc=1)
 plt.show()
