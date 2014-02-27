@@ -26,6 +26,8 @@ class LogisticRegressionLayer(object):
     def weighted_negative_log_likelihood(self, y):
         return -T.mean(T.log(self.p_y_given_x)[T.nonzero(y), 1]) - T.mean(T.log(self.p_y_given_x)[T.nonzero(y - 1), 0])
 
+    def tp_idx(self, y):
+        return T.and_(T.eq(y, 1), T.eq(self.y_pred, 1)).nonzero()[0]
 
     def tptn(self, y):
         tp = T.and_(T.eq(y, 1), T.eq(self.y_pred, 1)).sum()

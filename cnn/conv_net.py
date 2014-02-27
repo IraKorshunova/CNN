@@ -1,8 +1,9 @@
 import theano
 import numpy as np
-np.set_printoptions(threshold=np.nan)
+#np.set_printoptions(threshold=np.nan)
 import theano.tensor as T
 from theano import Param
+import time
 from cnn_trainer.train_set_iterator import TrainSetIterator
 from cnn.hidden_layer import HiddenLayer
 from cnn.conv_layer import ConvPoolLayer
@@ -49,6 +50,7 @@ class ConvNet(object):
         # c5: 120@1*1
         self.layer2 = HiddenLayer(rng=rng, input=layer2_input,
                                   n_in=nkerns[1] * 1 * input_layer2_size, n_out=nkerns[2],
+                                  training_mode=self.training_mode,
                                   dropout_prob=dropout_prob)
         # f6/output
         self.layer3 = LogisticRegressionLayer(input=self.layer2.output, n_in=nkerns[2], n_out=2,
@@ -56,8 +58,7 @@ class ConvNet(object):
 
         self.params = self.layer3.params + self.layer2.params + layer1.params + layer0.params
 
-    def validate(self, train_set, valid_set, init_learning_rate, max_epochs,
-                 max_fails, improvement_threshold, validation_frequency):
+    def validate(self, train_set, valid_set, init_learning_rate, max_iters, validation_frequency):
 
         train_set_iterator = TrainSetIterator(train_set, self.training_batch_size)
         n_batches = train_set_iterator.get_number_of_batches()
@@ -66,9 +67,10 @@ class ConvNet(object):
 
         valid_set_x, valid_set_y = valid_set
         valid_size = valid_set_x.shape[0]
-        print 'validation set \nshape:', valid_set[1].shape, 'number of seizures:', np.sum(valid_set[1])
+        print 'validation set \nshape:', valid_size, 'number of seizures:', np.sum(valid_set[1])
 
         learning_rate = theano.shared(np.float32(init_learning_rate))
+        learning_rate_decay = init_learning_rate / max_iters
 
         cost = self.layer3.negative_log_likelihood(self.y)
         grads = T.grad(cost, self.params)
@@ -90,89 +92,78 @@ class ConvNet(object):
                                          on_unused_input='ignore')
 
         #------------------------------  TRAINING
-        best_weighted_cost = np.inf
-        best_weighted_iter = 0
-        best_cost = np.inf
-        best_iter = 0
-
         iter = 0
         epoch = 0
-        fails = 0
         done_looping = False
-
-        while (epoch < max_epochs) and (not done_looping):
+        start_time = time.clock()
+        while not done_looping:
             epoch += 1
-            if epoch % 2 == 0:
-                learning_rate.set_value(max(np.float32(learning_rate.get_value() / 1.5), 0.01))
-
             for x, y in train_set_iterator:
                 iter += 1
                 train_model(x, y)
+                learning_rate.set_value(max(np.float32(learning_rate.get_value() - learning_rate_decay), 0.0))
                 # ------------------------ VALIDATION
                 if iter % validation_frequency == 0:
                     self.batch_size.set_value(valid_size)
-                    [cost, tp, tn, fp, fn] = validate_model(valid_set_x, valid_set_y)
-                    print epoch, iter, tp, tn, fp, fn, cost, learning_rate.get_value()
+                    [valid_cost, tp, tn, fp, fn] = validate_model(valid_set_x, valid_set_y)
+                    print epoch, iter, tp, tn, fp, fn, valid_cost, learning_rate.get_value(), (time.clock() - start_time)/60.
 
                     self.batch_size.set_value(self.training_batch_size)
 
-                    fails = 0 if cost < best_cost * improvement_threshold else fails + 1
-                    if cost < best_cost:
-                        best_iter = iter
-                        best_cost = cost
-
-                    if fails >= max_fails:
+                    if iter >= max_iters:
                         done_looping = True
                         break
+        return valid_cost
 
-        print('Optimization complete.')
-        print 'Best weighted cost', best_weighted_cost
-        print 'Best weighted iteration', best_weighted_iter
-        print 'Best cost', best_cost
-        print 'Best iteration', best_iter
+    def test(self, train_set, test_set, init_learning_rate, max_iters):
+        train_set_iterator = TrainSetIterator(train_set, self.training_batch_size)
+        n_batches = train_set_iterator.get_number_of_batches()
+        print 'training set \nshape:', train_set[1].shape, 'number of seizures:', np.sum(
+            train_set[1]), 'number of batches:', n_batches
 
-        return best_cost
-
-    def test(self, train_set, test_set, init_learning_rate, learning_rate_decay):
-        learning_rate = init_learning_rate
-        train_set_iterator = TrainSetIterator(train_set)
         test_set_x, test_set_y = test_set
         test_size = test_set_x.shape[0]
+        print 'test set \nshape:', test_size, 'number of seizures:', np.sum(test_set[1])
+
+        learning_rate = theano.shared(np.float32(init_learning_rate))
+        learning_rate_decay = init_learning_rate / max_iters
 
         cost = self.layer3.negative_log_likelihood(self.y)
         grads = T.grad(cost, self.params)
-
-        updates = []
-        for param_i, grad_i in zip(self.params, grads):
-            updates.append((param_i, param_i - learning_rate * grad_i))
+        updates = self._vanilla_updates(grads, learning_rate)
 
         #----------- FUNCTIONS
         tp, tn = self.layer3.tptn(self.y)
         fp, fn = self.layer3.fpfn(self.y)
+        tp_idx = self.layer3.tp_idx(self.y)
 
         train_model = theano.function([self.x, self.y, Param(self.training_mode, default=1)], cost, updates=updates,
                                       on_unused_input='ignore')
-        test_model = theano.function([self.x, self.y, Param(self.training_mode, default=0)], [tp, tn, fp, fn],
+        test_model = theano.function([self.x, self.y, Param(self.training_mode, default=0)], [tp_idx, tp, tn, fp, fn],
                                      on_unused_input='ignore')
 
         iter = 0
         epoch = 0
+        done_looping = False
         #------------------------------  TRAINING
-        while True:
+        while not done_looping:
             epoch += 1
             print 'e', epoch
-            for batch in train_set_iterator:
+            for x, y in train_set_iterator:
                 iter += 1
-                train_model(batch[0], batch[1])
-                learning_rate -= learning_rate_decay
-                if learning_rate < 0:
+                train_model(x, y)
+                learning_rate.set_value(max(np.float32(learning_rate.get_value() - learning_rate_decay), 0.0))
+                if iter > max_iters:
+                    done_looping = True
                     break
-                    #------------------------------  TESTING
+
+        #------------------------------  TESTING
         self.batch_size.set_value(test_size)
-        [tp, tn, fp, fn] = test_model(test_set_x, test_set_y)
+        [tp_idx, tp, tn, fp, fn] = test_model(test_set_x, test_set_y)
         print 'test'
         print 'tp:', tp, 'tn:', tn, 'fp:', fp, 'fn', fn
-        print '*********************'
+        print 'tp indices:', tp_idx
+        print 'seizure indices:', np.flatnonzero(test_set_y)
 
     def _vanilla_updates(self, grads, learning_rate):
         updates = []
@@ -181,6 +172,7 @@ class ConvNet(object):
         return updates
 
     def _momentum_updates(self, grads, learning_rate):
+        print 'momentum'
         velocity = [theano.shared(np.zeros_like(param_i.get_value())) for param_i in self.params]
         momentum = np.float32(0.5)
         updates = []
