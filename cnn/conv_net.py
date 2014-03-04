@@ -58,7 +58,8 @@ class ConvNet(object):
 
         self.params = self.layer3.params + self.layer2.params + layer1.params + layer0.params
 
-    def validate(self, train_set, valid_set, init_learning_rate, max_iters, validation_frequency):
+    def validate(self, train_set, valid_set, init_learning_rate, max_iters, validation_frequency, max_fails,
+                 improvement_threshold):
 
         train_set_iterator = TrainSetIterator(train_set, self.training_batch_size)
         n_batches = train_set_iterator.get_number_of_batches()
@@ -70,7 +71,7 @@ class ConvNet(object):
         print 'validation set \nshape:', valid_size, 'number of seizures:', np.sum(valid_set[1])
 
         learning_rate = theano.shared(np.float32(init_learning_rate))
-        learning_rate_decay = init_learning_rate / max_iters
+        learning_rate_decay = np.float32(init_learning_rate / max_iters)
 
         cost = self.layer3.negative_log_likelihood(self.y)
         grads = T.grad(cost, self.params)
@@ -94,6 +95,9 @@ class ConvNet(object):
         #------------------------------  TRAINING
         iter = 0
         epoch = 0
+        best_cost = np.inf
+        best_iter = 0
+        fails = 0
         done_looping = False
         start_time = time.clock()
         while not done_looping:
@@ -101,21 +105,29 @@ class ConvNet(object):
             for x, y in train_set_iterator:
                 iter += 1
                 train_model(x, y)
-                learning_rate.set_value(max(np.float32(learning_rate.get_value() - learning_rate_decay), 0.0))
+                learning_rate.set_value(max(learning_rate.get_value() - learning_rate_decay, 0.0))
                 # ------------------------ VALIDATION
                 if iter % validation_frequency == 0:
                     self.batch_size.set_value(valid_size)
                     [valid_cost, tp, tn, fp, fn] = validate_model(valid_set_x, valid_set_y)
-                    print epoch, iter, tp, tn, fp, fn, valid_cost, learning_rate.get_value(), (time.clock() - start_time)/60.
+                    print epoch, iter, tp, tn, fp, fn, valid_cost, learning_rate.get_value()
 
                     self.batch_size.set_value(self.training_batch_size)
 
-                    if iter >= max_iters:
+                    fails = 0 if valid_cost < best_cost * improvement_threshold else fails + 1
+                    if valid_cost < best_cost:
+                        best_iter = iter
+                        best_cost = valid_cost
+
+                    if iter >= max_iters or fails >= max_fails:
                         done_looping = True
                         break
-        return valid_cost
 
-    def test(self, train_set, test_set, init_learning_rate, max_iters):
+        print 'time:', (time.clock() - start_time) / 60.
+        print 'best_iter', best_iter
+        return best_iter
+
+    def test(self, train_set, test_set, init_learning_rate, learning_rate_decay, opt_iters):
         train_set_iterator = TrainSetIterator(train_set, self.training_batch_size)
         n_batches = train_set_iterator.get_number_of_batches()
         print 'training set \nshape:', train_set[1].shape, 'number of seizures:', np.sum(
@@ -126,7 +138,7 @@ class ConvNet(object):
         print 'test set \nshape:', test_size, 'number of seizures:', np.sum(test_set[1])
 
         learning_rate = theano.shared(np.float32(init_learning_rate))
-        learning_rate_decay = init_learning_rate / max_iters
+        learning_rate_decay = np.float32(learning_rate_decay)
 
         cost = self.layer3.negative_log_likelihood(self.y)
         grads = T.grad(cost, self.params)
@@ -143,20 +155,17 @@ class ConvNet(object):
                                      on_unused_input='ignore')
 
         iter = 0
-        epoch = 0
         done_looping = False
         #------------------------------  TRAINING
         while not done_looping:
-            epoch += 1
-            print 'e', epoch
             for x, y in train_set_iterator:
                 iter += 1
                 train_model(x, y)
-                learning_rate.set_value(max(np.float32(learning_rate.get_value() - learning_rate_decay), 0.0))
-                if iter > max_iters:
+                learning_rate.set_value(max(learning_rate.get_value() - learning_rate_decay, 0.0))
+                if iter > opt_iters:
                     done_looping = True
                     break
-
+        print 'train iterations:', iter
         #------------------------------  TESTING
         self.batch_size.set_value(test_size)
         [tp_idx, tp, tn, fp, fn] = test_model(test_set_x, test_set_y)
