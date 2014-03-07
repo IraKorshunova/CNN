@@ -4,6 +4,7 @@ import cPickle
 import glob
 import shutil
 import os
+import re
 
 win_len = 1000
 ignore_after_seizure = win_len * 3 * 2
@@ -11,7 +12,7 @@ rate = 5
 
 
 def filter_subsample_normalize(path_in, path_out):
-    files = sorted(glob.glob(path_in + '/*.pickle'))
+    files = glob.glob(path_in + '/*.pickle')
     n_files = len(files)
 
     all_x = None
@@ -41,7 +42,7 @@ def filter_subsample_normalize(path_in, path_out):
     mean = np.mean(all_x, 0)
     std = np.std(all_x, 0)
 
-    files = sorted(glob.glob(path_out+'/*.pickle'))
+    files = glob.glob(path_out+'/*.pickle')
     for i in range(n_files):
         f = open(files[i], 'rb')
         x, y = cPickle.load(f)
@@ -52,24 +53,6 @@ def filter_subsample_normalize(path_in, path_out):
         f = open(files[i], 'wb')
         cPickle.dump((x, y), f, -1)
         f.close()
-
-def check(path):
-    files = glob.glob(path)
-    n_files = len(files)
-    all_x = None
-
-    for i in range(n_files):
-        f = open(files[i], 'rb')
-        x, y = cPickle.load(f)
-
-        if (i == 0):
-            all_x = x
-        else:
-            all_x = np.concatenate((all_x, x), axis=0)
-
-    print all_x.shape
-    print np.mean(all_x, 0)
-    print np.std(all_x, 0)
 
 
 def get_begin_end(x):
@@ -84,16 +67,13 @@ def get_begin_end(x):
 def preprocess(path_in, path_out):
     files = glob.glob(path_in+'/*.pickle')
     n_files = len(files)
+    p = re.compile('_\d+')
 
     for i in range(n_files):
         print '------------------------'
-        print 'file:', i
-        if i == 19:
-            print 'lll'
+        print '===================================================file:', i
         f = open(files[i], 'rb')
         X, Y = cPickle.load(f)
-        f.close()
-
         x, y = None, None
         be = get_begin_end(Y)
         print 'begin_end', be
@@ -115,19 +95,16 @@ def preprocess(path_in, path_out):
                 y = np.concatenate((y, y2))
 
         elif len(be) > 1:
-            print 'NOT IMPLEMENTEND YET !!!'
-            print be
-
             x, y = convert_data_cnn(X[:be[0, 0] - win_len, :])  # first seizure
-            for i in range(len(be)):
-                x2, y2 = convert_data_cnn(X[be[i, 0] - win_len:be[i, 1], :], y=1)
+            for j in range(len(be)):
+                x2, y2 = convert_data_cnn(X[be[j, 0] - win_len:be[j, 1], :], y=1)
                 x = np.concatenate((x, x2))
                 y = np.concatenate((y, y2))
 
-                if i == len(be) - 1: # last seizure
-                    x2, y2 = convert_data_cnn(X[be[i, 1] + ignore_after_seizure:, :], y=0)
+                if j == len(be) - 1: # last seizure
+                    x2, y2 = convert_data_cnn(X[be[j, 1] + ignore_after_seizure:, :], y=0)
                 else:
-                    x2, y2 = convert_data_cnn(X[be[i, 1] + ignore_after_seizure: be[i + 1, 0] - win_len, :], y=0)
+                    x2, y2 = convert_data_cnn(X[be[j, 1] + ignore_after_seizure: be[j + 1, 0] - win_len, :], y=0)
 
                 x = np.concatenate((x, x2))
                 y = np.concatenate((y, y2))
@@ -137,8 +114,10 @@ def preprocess(path_in, path_out):
 
         x = np.transpose(x, (0, 2, 1))
         print 'output_shape', x.shape
-        np.save(path_out + 'X_' + str(i), x)
-        np.save(path_out + 'Y_' + str(i), y)
+        number = p.findall(os.path.basename(f.name))[0]
+        np.save(path_out + 'X'+ number, x)
+        np.save(path_out + 'Y'+ number, y)
+        f.close()
 
 
 def convert_data_cnn(x, y=0):
@@ -168,10 +147,9 @@ def reshape_data_cnn(x):
 
 
 if __name__ == "__main__":
-    patient = '24'
+    patient = '08'
     os.mkdir('../data/data'+patient+'_processed')
     os.mkdir('../data/data'+patient+'_npy')
     filter_subsample_normalize('../data/chb'+patient, '../data/data'+patient+'_processed')
-    check('../data/data'+patient+'_processed/*.pickle')
     preprocess('../data/data'+patient+'_processed', '../data/data'+patient+'_npy/')
     shutil.rmtree('../data/data'+patient+'_processed')
