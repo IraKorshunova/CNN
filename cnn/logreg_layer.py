@@ -29,6 +29,9 @@ class LogisticRegressionLayer(object):
     def tp_idx(self, y):
         return T.and_(T.eq(y, 1), T.eq(self.y_pred, 1)).nonzero()[0]
 
+    def fp_idx(self,y):
+        return T.and_(T.eq(y, 0), T.eq(self.y_pred, 1)).nonzero()[0]
+
     def tptn(self, y):
         tp = T.and_(T.eq(y, 1), T.eq(self.y_pred, 1)).sum()
         tn = T.and_(T.eq(y, 0), T.eq(self.y_pred, 0)).sum()

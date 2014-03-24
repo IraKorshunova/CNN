@@ -5,7 +5,7 @@ from theano.ifelse import ifelse
 
 
 class HiddenLayer(object):
-    def __init__(self, rng, input, n_in, n_out, training_mode, dropout_prob, W=None, b=None):
+    def __init__(self, rng, input, n_in, n_out, training_mode, dropout_prob, activation_function, W=None, b=None):
         self.input = input
 
         if W is None:
@@ -28,9 +28,7 @@ class HiddenLayer(object):
         if dropout_prob != 0.0:
             lin_output = ifelse(T.eq(training_mode, 1), self._dropout(rng, lin_output, dropout_prob), lin_output)
 
-        self.output = T.tanh(lin_output)
-
-        #print self.W.get_value()
+        self.output = activation_function(lin_output)
         self.params = [self.W, self.b]
 
     def _dropout(self, rng, layer, p):

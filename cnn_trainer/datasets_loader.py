@@ -34,6 +34,28 @@ class DatasetsLoader(object):
         return {'train': train_set, 'valid': valid_set}
 
     @staticmethod
+    def get_train_valid_files(path, file_numbers, rng):
+
+        seizure_files = []
+        nonseizure_files = []
+
+        for i in file_numbers:
+            y = np.load(path + 'Y_' + str(i) + ".npy")
+            if np.sum(y) > 0:
+                seizure_files.append(i)
+            else:
+                nonseizure_files.append(i)
+
+        valid_files = list(rng.choice(seizure_files, max(1, np.rint(len(seizure_files) / 5.0)), False))
+        ns_valid_files = rng.choice(nonseizure_files, max(1, np.rint(len(nonseizure_files) / 5.0)), False)
+        for i in ns_valid_files:
+            valid_files.append(i)
+
+        train_files = list(set(file_numbers) - set(valid_files))
+
+        return {'train': train_files, 'valid': valid_files}
+
+    @staticmethod
     def get_begin_end(x):
         be = np.where(np.logical_xor(x[:-1], x[1:]))[0] + 1
         if x[0] > 0:

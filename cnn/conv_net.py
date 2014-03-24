@@ -4,6 +4,8 @@ import numpy as np
 import theano.tensor as T
 from theano import Param
 import time
+import json
+from test_utils import *
 from cnn_trainer.train_set_iterator import TrainSetIterator
 from cnn.hidden_layer import HiddenLayer
 from cnn.conv_layer import ConvPoolLayer
@@ -12,7 +14,14 @@ from cnn.logreg_layer import LogisticRegressionLayer
 
 class ConvNet(object):
     def __init__(self, nkerns, recept_width, pool_width,
-                 dropout_prob, training_batch_size, n_timesteps=1000, dim=18):
+                 dropout_prob, training_batch_size, activation, n_timesteps=1000, dim=18):
+
+        if activation == 'tanh':
+            activation_function = lambda x: T.tanh(x)
+        elif activation == 'relu':
+            activation_function = lambda x: T.maximum(0.0, x)
+        else:
+            raise ValueError('unknown activation function')
 
         self.training_batch_size = training_batch_size
 
@@ -32,7 +41,7 @@ class ConvNet(object):
         layer0 = ConvPoolLayer(rng, input=self.layer0_input,
                                image_shape=(None, dim, 1, n_timesteps),
                                filter_shape=(nkerns[0], dim, 1, recept_width[0]),
-                               poolsize=(1, pool_width[0]))
+                               poolsize=(1, pool_width[0]), activation_function=activation_function)
 
 
         # c3: nkerns[1] @ 1 * (s2 - recept_width[1] + 1)
@@ -41,7 +50,7 @@ class ConvNet(object):
         layer1 = ConvPoolLayer(rng, input=layer0.output,
                                image_shape=(None, nkerns[0], 1, input_layer1_width),
                                filter_shape=(nkerns[1], nkerns[0], 1, recept_width[1]),
-                               poolsize=(1, pool_width[1]))
+                               poolsize=(1, pool_width[1]), activation_function=activation_function)
 
         # s4:(batch_size, nkerns[1], 1, s4) -> flatten(2) -> (batch_size, nkerns[1]* 1 * s4)
         layer2_input = layer1.output.flatten(2)
@@ -51,14 +60,14 @@ class ConvNet(object):
         self.layer2 = HiddenLayer(rng=rng, input=layer2_input,
                                   n_in=nkerns[1] * 1 * input_layer2_size, n_out=nkerns[2],
                                   training_mode=self.training_mode,
-                                  dropout_prob=dropout_prob)
+                                  dropout_prob=dropout_prob, activation_function=activation_function)
         # f6/output
         self.layer3 = LogisticRegressionLayer(input=self.layer2.output, n_in=nkerns[2], n_out=2,
                                               training_mode=self.training_mode, dropout_prob=dropout_prob)
 
         self.params = self.layer3.params + self.layer2.params + layer1.params + layer0.params
 
-    def validate(self, train_set, valid_set, init_learning_rate, max_iters, validation_frequency, max_fails,
+    def validate(self, train_set, valid_set, init_learning_rate, max_iters, validation_frequency,
                  improvement_threshold):
 
         train_set_iterator = TrainSetIterator(train_set, self.training_batch_size)
@@ -86,18 +95,19 @@ class ConvNet(object):
         tp, tn = self.layer3.tptn(self.y)
         fp, fn = self.layer3.fpfn(self.y)
 
-        train_model = theano.function([self.x, self.y, Param(self.training_mode, default=1)], cost, updates=updates,
+        train_model = theano.function([self.x, self.y, Param(self.training_mode, default=1)],
+                                      [cost, self.layer3.p_y_given_x, self.layer2.output], updates=updates,
                                       on_unused_input='ignore')
         validate_model = theano.function([self.x, self.y, Param(self.training_mode, default=0)],
                                          [cost, tp, tn, fp, fn],
                                          on_unused_input='ignore')
-
         #------------------------------  TRAINING
         iter = 0
         epoch = 0
         best_cost = np.inf
         best_iter = 0
-        fails = 0
+        patience_increase = 2
+        patience = 150 * validation_frequency #50
         done_looping = False
         start_time = time.clock()
         while not done_looping:
@@ -114,20 +124,21 @@ class ConvNet(object):
 
                     self.batch_size.set_value(self.training_batch_size)
 
-                    fails = 0 if valid_cost < best_cost * improvement_threshold else fails + 1
                     if valid_cost < best_cost:
+                        if valid_cost < best_cost * improvement_threshold:
+                            patience = max(patience, iter * patience_increase)
                         best_iter = iter
                         best_cost = valid_cost
 
-                    if iter >= max_iters or fails >= max_fails:
+                    if iter >= max_iters or patience <= iter:
                         done_looping = True
                         break
 
         print 'time:', (time.clock() - start_time) / 60.
-        print 'best_iter', best_iter
+        print 'best_iter:', best_iter
         return best_iter
 
-    def test(self, train_set, test_set, init_learning_rate, learning_rate_decay, opt_iters):
+    def test(self, train_set, test_set, init_learning_rate, learning_rate_decay, opt_iters, out_file):
         train_set_iterator = TrainSetIterator(train_set, self.training_batch_size)
         n_batches = train_set_iterator.get_number_of_batches()
         print 'training set \nshape:', train_set[1].shape, 'number of seizures:', np.sum(
@@ -148,10 +159,12 @@ class ConvNet(object):
         tp, tn = self.layer3.tptn(self.y)
         fp, fn = self.layer3.fpfn(self.y)
         tp_idx = self.layer3.tp_idx(self.y)
+        fp_idx = self.layer3.fp_idx(self.y)
 
         train_model = theano.function([self.x, self.y, Param(self.training_mode, default=1)], cost, updates=updates,
                                       on_unused_input='ignore')
-        test_model = theano.function([self.x, self.y, Param(self.training_mode, default=0)], [tp_idx, tp, tn, fp, fn],
+        test_model = theano.function([self.x, self.y, Param(self.training_mode, default=0)],
+                                     [tp_idx, fp_idx, tp, tn, fp, fn],
                                      on_unused_input='ignore')
 
         iter = 0
@@ -165,14 +178,18 @@ class ConvNet(object):
                 if iter > opt_iters:
                     done_looping = True
                     break
-        print 'train iterations:', iter
-        #------------------------------  TESTING
+                    #------------------------------  TESTING
         self.batch_size.set_value(test_size)
-        [tp_idx, tp, tn, fp, fn] = test_model(test_set_x, test_set_y)
-        print 'test'
+        [tp_idx, fp_idx, tp, tn, fp, fn] = test_model(test_set_x, test_set_y)
+        seizure_idx = np.flatnonzero(test_set_y)
+        det_dict = detections_and_delay(tp_idx,fp_idx,seizure_idx)
+        print '-- TEST --'
         print 'tp:', tp, 'tn:', tn, 'fp:', fp, 'fn', fn
-        print 'tp indices:', tp_idx
-        print 'seizure indices:', np.flatnonzero(test_set_y)
+        print 'fp indices:', fp_idx, 'tp indices:', tp_idx
+        print 'seizure indices:', seizure_idx
+        print det_dict
+        json.dump(det_dict, out_file)
+        out_file.write('\n')
 
     def _vanilla_updates(self, grads, learning_rate):
         updates = []
@@ -199,40 +216,3 @@ class ConvNet(object):
             updates.append((param_i, param_i - learning_rate * grad_i / (T.sqrt(ms_next_i))))
             updates.append((ms_i, ms_next_i))
         return updates
-
-    def _check_num_gradient(self, (x, y)):
-        eps = 0.001
-        cost = self.layer3.negative_log_likelihood(self.y)
-        grads = T.grad(cost, self.params)
-        f_cost = theano.function([self.x, self.y, Param(self.training_mode, default=1)], cost, on_unused_input='ignore')
-        f_grad = theano.function([self.x, self.y, Param(self.training_mode, default=1)], grads,
-                                 on_unused_input='ignore')
-        params_num_grad = []
-        for p in map(lambda x: x.get_value(borrow=True), [self.params[2]]):
-            numer_grad = np.zeros_like(p)
-            if len(p.shape) == 2:
-                for (i, j), value in np.ndenumerate(p):
-                    p[i, j] = value + eps
-                    cost_plus = f_cost(x, y)
-                    p[i, j] = value - eps
-                    cost_minus = f_cost(x, y)
-                    p[i, j] = value
-                    numer_grad[i, j] = (cost_plus - cost_minus) / (2 * eps)
-            elif len(p.shape) == 1:
-                for i, value in np.ndenumerate(p):
-                    p[i] = value + eps
-                    cost_plus = f_cost(x, y)
-                    p[i] = value - eps
-                    cost_minus = f_cost(x, y)
-                    p[i] = value
-                    numer_grad[i] = (cost_plus - cost_minus) / (2 * eps)
-            else:
-                raise ValueError()
-            params_num_grad.append(numer_grad)
-
-        print np.max(np.abs(f_grad(x, y)[2] - params_num_grad[0]))
-        print '--------------------'
-        print np.where(params_num_grad[0] == 0.0)
-        print np.where(f_grad(x, y)[2] == 0.0)
-        return
-

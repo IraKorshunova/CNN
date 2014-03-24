@@ -2,11 +2,10 @@ import numpy
 import theano
 from theano.tensor.nnet import conv
 from theano.tensor.signal import downsample
-from theano import tensor as T
 
 
 class ConvPoolLayer(object):
-    def __init__(self, rng, input, filter_shape, image_shape, poolsize):
+    def __init__(self, rng, input, filter_shape, image_shape, poolsize, activation_function):
         assert image_shape[1] == filter_shape[1]
 
         fan_in = numpy.prod(filter_shape[1:])
@@ -35,6 +34,6 @@ class ConvPoolLayer(object):
 
         pooled_out = downsample.max_pool_2d(conv_out, poolsize, ignore_border=True)
 
-        self.output = T.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
+        self.output = activation_function(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
 
         self.params = [self.W, self.b]
