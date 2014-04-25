@@ -6,18 +6,16 @@ import shutil
 import os
 import re
 
-stride = 1  # in seconds
+
 win_len = 1000
 n_channels = 18
 ignore_after_seizure = win_len * 3 * 2
 rate = 5
 
 
-def filter_subsample_normalize(path_in, path_out):
+def filter(path_in, path_out):
     files = glob.glob(path_in + '/*.pickle')
     n_files = len(files)
-
-    all_x = None
 
     for i in range(n_files):
         f_in = open(files[i], 'rb')
@@ -36,29 +34,6 @@ def filter_subsample_normalize(path_in, path_out):
         cPickle.dump((x, y), f_out, -1)
         f_out.close()
 
-        if i == 0:
-            all_x = x
-        else:
-            all_x = np.concatenate((all_x, x), axis=0)
-
-    mean = np.mean(all_x, 0)
-    std = np.std(all_x, 0)
-
-    files = glob.glob(path_out + '/*.pickle')
-    for i in range(n_files):
-        f = open(files[i], 'rb')
-        x, y = cPickle.load(f)
-        f.close()
-
-        x = (x - mean) / std
-
-        x = np.float32(x)
-        y = np.int8(y)
-
-        f = open(files[i], 'wb')
-        cPickle.dump((x, y), f, -1)
-        f.close()
-
 
 def get_begin_end(x):
     be = np.where(np.logical_xor(x[:-1], x[1:]))[0] + 1
@@ -69,7 +44,7 @@ def get_begin_end(x):
     return np.reshape(be, (len(be) / 2, 2))
 
 
-def preprocess(path_in, path_out):
+def divide_into_trials(path_in, path_out):
     files = glob.glob(path_in + '/*.pickle')
     n_files = len(files)
     p = re.compile('\d+')
@@ -118,6 +93,8 @@ def preprocess(path_in, path_out):
         else:
             x, y = convert_data_cnn(X)
 
+        x = np.float32(x)
+        y = np.int8(y)
         print 'output_shape', x.shape
         number = str(int(p.findall(os.path.basename(f.name))[1]))
         np.save(path_out + 'X_' + number, x)
@@ -125,9 +102,32 @@ def preprocess(path_in, path_out):
         f.close()
 
 
+def normalize(path):
+    files = glob.glob(path + 'X_*.npy')
+    all_x = None
+
+    for f in files:
+        x = np.load(f)
+        x = np.transpose(x, (0, 2, 1))
+        x = np.reshape(x, (x.shape[0], x.shape[1] * x.shape[2]))
+        np.save(f, x)
+        if all_x is None:
+            all_x = x
+        else:
+            all_x = np.concatenate((all_x, x), axis=0)
+
+    mean = np.mean(all_x, 0)
+    std = np.std(all_x, 0)
+
+    for f in files:
+        x = np.load(f)
+        x = (x - mean) / std
+        np.save(f, x)
+
+
 def convert_data_cnn(x, y=0):
     if len(x) > win_len:
-        idx = range(0, len(x) - win_len, stride*100)
+        idx = range(0, len(x) - win_len, win_len / 2)
         data_x = np.zeros((len(idx), win_len, n_channels), dtype='float32')
         j = 0
         for i in idx:
@@ -140,9 +140,10 @@ def convert_data_cnn(x, y=0):
 
 
 if __name__ == "__main__":
-    patient = '08'
+    patient = '24'
     os.mkdir('../data/data' + patient + '_processed')
     os.mkdir('../data/data' + patient + '_npy')
-    filter_subsample_normalize('../data/chb' + patient, '../data/data' + patient + '_processed')
-    preprocess('../data/data' + patient + '_processed', '../data/data' + patient + '_npy/')
+    filter('../data/chb' + patient, '../data/data' + patient + '_processed')
+    divide_into_trials('../data/data' + patient + '_processed', '../data/data' + patient + '_npy/')
+    normalize('../data/data' + patient + '_npy/')
     shutil.rmtree('../data/data' + patient + '_processed')
