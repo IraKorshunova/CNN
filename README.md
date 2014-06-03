@@ -1,4 +1,4 @@
 CNN
 ===
-Convolutional neural network written in Theano for EEG classification. 
+Convolutional neural network for EEG classification. 
 
